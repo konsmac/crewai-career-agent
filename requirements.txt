@@ -3,5 +3,6 @@ crewai==0.28.8
 crewai-tools
 langchain-google-genai
 langchain-community
+duckduckgo-search
 streamlit
 docx2txt
