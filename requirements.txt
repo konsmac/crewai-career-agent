@@ -1,6 +1,5 @@
-crewai==0.28.8
+crewai>=0.100.0
 crewai-tools
 langchain-google-genai
 streamlit
 docx2txt
-setuptools
