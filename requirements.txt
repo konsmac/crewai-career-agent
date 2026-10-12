@@ -3,3 +3,4 @@ crewai-tools
 langchain-google-genai
 streamlit
 docx2txt
+setuptools
