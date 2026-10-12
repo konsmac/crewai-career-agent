@@ -11,7 +11,7 @@ except RuntimeError:
 
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_community.chat_models import ChatGroq
+from langchain_groq import ChatGroq  # FIXED IMPORT LINE
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import tool
 
