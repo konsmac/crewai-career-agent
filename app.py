@@ -3,7 +3,7 @@ import os
 import docx2txt
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
-from crewai_tools import DuckDuckGoSearchTool
+from langchain_community.tools import DuckDuckGoSearchRun
 
 # 1. SETUP FREE LLM CONFIGURATION
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
@@ -15,8 +15,8 @@ llm = ChatGoogleGenerativeAI(
     temperature=0.3
 )
 
-# Initialize a completely free live search tool for your agents
-search_tool = DuckDuckGoSearchTool()
+# Initialize a completely free live search tool using LangChain's wrapper
+search_tool = DuckDuckGoSearchRun()
 
 # 2. STREAMLIT WEB INTERFACE
 st.set_page_config(page_title="AI Agent Career Strategist", layout="wide")
