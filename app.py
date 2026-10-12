@@ -12,7 +12,7 @@ except RuntimeError:
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools import DuckDuckGoSearchRun
-from crewai.tools import tool # Import the official CrewAI tool decorator
+from langchain_core.tools import tool # FIX: Using the core LangChain decorator compatible with 0.28.8
 
 # 1. SETUP FREE LLM CONFIGURATION
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
@@ -23,7 +23,7 @@ llm = ChatGoogleGenerativeAI(
     temperature=0.3
 )
 
-# WRAP THE DUCKDUCKGO TOOL INSIDE A CUSTOM CREWAI TOOL FUNCTION
+# WRAP THE DUCKDUCKGO TOOL INSIDE A COMPATIBLE FUNCTION
 @tool("Web Search Tool")
 def search_tool(query: str) -> str:
     """Useful to search the internet for live job postings, market trends, and role vacancies."""
@@ -74,7 +74,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                 backstory="An expert in finding trends on job boards. You identify what hiring managers are actively looking for right now.",
                 verbose=True,
                 allow_delegation=False,
-                tools=[search_tool], # Uses the custom decorator tool
+                tools=[search_tool], 
                 llm=llm
             )
 
