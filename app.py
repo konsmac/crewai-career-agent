@@ -11,7 +11,7 @@ except RuntimeError:
 
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_groq import ChatGroq  # FIXED IMPORT LINE
+from langchain_groq import ChatGroq
 from langchain_community.tools import DuckDuckGoSearchRun
 from langchain_core.tools import tool
 
@@ -26,8 +26,9 @@ gemini_llm = ChatGoogleGenerativeAI(
     temperature=0.3
 ) if GOOGLE_API_KEY else None
 
+# FIXED: Swapped out retired Llama string for active Groq open tier engine
 groq_llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
     groq_api_key=GROQ_API_KEY,
     temperature=0.3
 ) if GROQ_API_KEY else None
@@ -36,7 +37,7 @@ groq_llm = ChatGroq(
 if GOOGLE_API_KEY:
     st.sidebar.success("🤖 Primary Engine: Gemini 3.8 Flash Active")
 elif GROQ_API_KEY:
-    st.sidebar.warning("⚡ Backup Engine: Groq Llama 3 Active (Gemini Skipped)")
+    st.sidebar.warning("⚡ Backup Engine: Groq GPT-OSS 120B Active (Gemini Skipped)")
 else:
     st.error("⚠️ Missing API keys! Please provide GOOGLE_API_KEY or GROQ_API_KEY in Render configuration.")
 
@@ -147,10 +148,9 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     raise Exception("Gemini key missing, falling back.")
                     
             except Exception as e:
-                # Catch quota/rate limit strings cleanly
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or not gemini_llm:
-                    st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq Llama 3.3 engine...")
+                    st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq fallback engine...")
                     
                     if groq_llm:
                         try:
