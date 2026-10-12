@@ -1,6 +1,16 @@
 import streamlit as st
 import os
 import docx2txt
+import asyncio  # IMPORT ASYNCIO TO REPAIR THE THREAD LOOP
+
+# --- FIX: FORCING EVENT LOOP FOR STREAMLIT RUNNER THREADS ---
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+# -------------------------------------------------------------
+
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools import DuckDuckGoSearchRun
