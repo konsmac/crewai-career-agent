@@ -2,6 +2,7 @@ setuptools==81.0.0
 crewai==0.28.8
 langchain-google-genai
 langchain-community
+langchain-groq
 duckduckgo-search
 streamlit
 docx2txt
