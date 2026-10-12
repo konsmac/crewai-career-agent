@@ -1,32 +1,34 @@
 import streamlit as st
 import os
 import docx2txt
-import asyncio  # IMPORT ASYNCIO TO REPAIR THE THREAD LOOP
+import asyncio
 
-# --- FIX: FORCING EVENT LOOP FOR STREAMLIT RUNNER THREADS ---
 try:
     asyncio.get_running_loop()
 except RuntimeError:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-# -------------------------------------------------------------
 
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.tools import DuckDuckGoSearchRun
+from crewai.tools import tool # Import the official CrewAI tool decorator
 
 # 1. SETUP FREE LLM CONFIGURATION
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
-# Initialize the free Gemini model via LangChain
 llm = ChatGoogleGenerativeAI(
     model="gemini-1.5-flash", 
     google_api_key=GOOGLE_API_KEY,
     temperature=0.3
 )
 
-# Initialize a completely free live search tool using LangChain's wrapper
-search_tool = DuckDuckGoSearchRun()
+# WRAP THE DUCKDUCKGO TOOL INSIDE A CUSTOM CREWAI TOOL FUNCTION
+@tool("Web Search Tool")
+def search_tool(query: str) -> str:
+    """Useful to search the internet for live job postings, market trends, and role vacancies."""
+    search = DuckDuckGoSearchRun()
+    return search.run(query)
 
 # 2. STREAMLIT WEB INTERFACE
 st.set_page_config(page_title="AI Agent Career Strategist", layout="wide")
@@ -72,7 +74,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                 backstory="An expert in finding trends on job boards. You identify what hiring managers are actively looking for right now.",
                 verbose=True,
                 allow_delegation=False,
-                tools=[search_tool],
+                tools=[search_tool], # Uses the custom decorator tool
                 llm=llm
             )
 
