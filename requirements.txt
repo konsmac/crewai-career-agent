@@ -1,6 +1,5 @@
 setuptools==81.0.0
 crewai==0.28.8
-crewai-tools
 langchain-google-genai
 langchain-community
 duckduckgo-search
