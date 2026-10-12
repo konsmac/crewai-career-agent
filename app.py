@@ -120,9 +120,15 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
             try:
                 result = crew.kickoff()
                 
-                # Output results to UI
+                # Output results to UI safely
                 st.success("✨ Analysis Complete!")
                 st.markdown("### 📊 Market & Resume Strategy Report")
-                st.write(result.raw)
+                
+                # FIX: Check if the result has a 'raw' attribute, otherwise print it directly
+                if hasattr(result, 'raw'):
+                    st.markdown(result.raw)
+                else:
+                    st.markdown(str(result))
+                    
             except Exception as e:
                 st.error(f"An error occurred during execution: {e}")
