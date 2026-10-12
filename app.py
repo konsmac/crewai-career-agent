@@ -18,7 +18,7 @@ from langchain_core.tools import tool # FIX: Using the core LangChain decorator 
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash-latest", # FIX: explicitly forces the production API path
+    model="gemini-2.5-flash", # FIX: Switches from the retired 1.5 line to the active production model
     google_api_key=GOOGLE_API_KEY,
     temperature=0.3
 )
