@@ -16,19 +16,17 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 
-# 1. SETUP LLM & SEARCH CONFIGURATION WITH DYNAMIC FALLBACKS
+# 1. CONFIGURACIÓN DE LLM Y SERPER API
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
 
-# Primary engine
 gemini_llm = ChatGoogleGenerativeAI(
     model="gemini-3.8-flash", 
     google_api_key=GOOGLE_API_KEY,
     temperature=0.3
 ) if GOOGLE_API_KEY else None
 
-# Fallback engine
 groq_llm = ChatGroq(
     model="qwen/qwen3.8-27b",
     groq_api_key=GROQ_API_KEY,
@@ -36,7 +34,6 @@ groq_llm = ChatGroq(
     max_tokens=800
 ) if GROQ_API_KEY else None
 
-# Sidebar status
 if GOOGLE_API_KEY:
     st.sidebar.success("🤖 Primary Engine: Gemini 3.8 Flash Active")
 elif GROQ_API_KEY:
@@ -45,48 +42,46 @@ elif GROQ_API_KEY:
 if not SERPER_API_KEY:
     st.sidebar.error("⚠️ SERPER_API_KEY missing! Live Google data will fail.")
 
-# Google Search Tool via Serper API to prevent cloud blocking
+# HERRAMIENTA DE BÚSQUEDA CORREGIDA (URL ABSOLUTA DE GOOGLE SERPER)
 @tool("Google Live Job Search Tool")
 def search_tool(query: str) -> str:
     """Searches Google for real-time live job postings, active hiring boards, and vacancy text snippets."""
     if not SERPER_API_KEY:
         return "Error: SERPER_API_KEY is missing. Real-time data cannot be pulled securely."
-        
+    
     user_region = st.session_state.get('target_region', 'Montreal')
     url = "https://serper.dev"
+    clean_query = query.replace('"', '').replace("'", "")
     
     payload = json.dumps({
-        "q": f'"{query}" jobs hiring vacancies openings in {user_region} site:linkedin.com OR site:indeed.com',
+        "q": f"{clean_query} jobs openings vacancies hiring in {user_region} (site:://linkedin.com OR site:indeed.com)",
         "num": 10
     })
-    headers = {
-        'X-API-KEY': SERPER_API_KEY,
-        'Content-Type': 'application/json'
-    }
+    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
     
     try:
-        response = requests.post(url, headers=headers, data=payload, timeout=10)
-        results = response.json()
+        response = requests.post(url, headers=headers, data=payload, timeout=12)
+        if response.status_code != 200:
+            return f"Error: Serper HTTP {response.status_code}. Check key limits."
         
+        results = response.json()
         output_data = []
-        if "organic" in results:
+        if "organic" in results and results["organic"]:
             for item in results["organic"]:
-                output_data.append(f"Title: {item.get('title')}\nSource: {item.get('link')}\nSnippet: {item.get('snippet')}\n---")
+                output_data.append(f"Title: {item.get('title', 'N/A')}\nSource: {item.get('link', 'N/A')}\nSnippet: {item.get('snippet', 'N/A')}\n---")
             return "\n".join(output_data)
-        else:
-            return f"No live search results came back from Google for {user_region} currently."
+        return f"No results found for '{clean_query}' in {user_region}."
     except Exception as e:
-        return f"Network connectivity error trying to contact Google Search API: {str(e)}"
+        return f"Connection error: {str(e)}"
 
-# 2. STREAMLIT WEB INTERFACE
+# 2. INTERFAZ DE USUARIO EN STREAMLIT
 st.set_page_config(page_title="AI Agent Career Strategist", layout="wide")
 st.title("💼 AI Agent Career Strategist Network")
 st.subheader("Optimize your resume using real-time market data")
 
-# User Inputs
 col1, col2 = st.columns(2)
 with col1:
-    region = st.text_input("📍 Target Geographic Region", placeholder="e.g., New York, Remote US, Toronto", key="target_region", value="Montreal")
+    region = st.text_input("📍 Target Geographic Region", placeholder="e.g., Montreal, New York", key="target_region", value="Montreal")
 with col2:
     timeframe = st.selectbox("⏳ Job Posting Timeframe", ["Past 24 hours", "Past week", "Past month"])
 
@@ -104,7 +99,7 @@ else:
         except Exception as e:
             st.error(f"Error parsing Word file: {e}")
 
-# 3. ADVANCED 3-PHASE PIPELINE TO ELIMINATE OUTPUT TRUNCATION
+# 3. PIPELINE DE EJECUCIÓN (MÉTODO CENTRALIZADO)
 def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
     max_words = 2000
     words = resume_content.split()
@@ -113,7 +108,7 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
     researcher = Agent(
         role='Market Research Analyst',
         goal=f'Analyze real-time search results of open job postings in {region} from the {timeframe}. Log exact vacancy titles and cross-reference common instances.',
-        backstory="A precise labor market trends analyst who reads live Google indexing snippets to discover genuine positions.",
+        backstory="A precise labor market trends analyst who reads live Google indexing snippets.",
         verbose=True,
         allow_delegation=False,
         tools=[search_tool], 
@@ -123,7 +118,7 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
     gap_analyst = Agent(
         role='Resume Gap Analyst',
         goal='Compare a technical resume against active market demands to uncover critical missing keywords and skills.',
-        backstory="An expert ATS filtering specialist who exposes missing core assets in professional profiles.",
+        backstory="An expert ATS filtering specialist who exposes missing core assets.",
         verbose=True,
         allow_delegation=False,
         llm=selected_llm
@@ -132,67 +127,32 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
     education_advisor = Agent(
         role='Executive Education Consultant',
         goal='Design actionable study roadmaps, including real certifications and free learning materials.',
-        backstory="A professional corporate learning curator who maps academic and skill development milestones.",
+        backstory="A professional corporate learning curator who maps development milestones.",
         verbose=True,
         allow_delegation=False,
         llm=selected_llm
     )
 
     if use_split_pipeline:
-        st.info("⚡ Phase 1/3: Querying Google API & Analyzing Live Vacancy Titles...")
-        task_1 = Task(
-            description=f"Analyze the live search snippets returned by the Google Search tool for {region}. Review the titles, count total distinct open entries surfaced in the text pool, and compile the 5 most frequent exact position names.",
-            expected_output="A structured report displaying the total positions counted inside the live search dump and a list of the top 5 job titles.",
-            agent=researcher
-        )
-        crew_1 = Crew(agents=[researcher], tasks=[task_1], process=Process.sequential)
-        phase_1_output = str(crew_1.kickoff())
+        st.info("⚡ Phase 1/3: Analyzing Live Vacancy Titles...")
+        t1 = Task(description=f"Analyze search snippets for {region}. Count total open entries and compile the 5 most frequent exact position names.", expected_output="Markdown table of counts and top 5 job titles.", agent=researcher)
+        phase_1_output = str(Crew(agents=[researcher], tasks=[t1], process=Process.sequential).kickoff())
 
         st.info("⚡ Phase 2/3: Mapping Structural Keyword & Skill Gaps...")
-        task_2 = Task(
-            description=f"Compare this resume:\n---\n{safe_resume}\n---\nAgainst these genuine live market openings discovered in Phase 1:\n{phase_1_output}\nIdentify exactly which critical skills are missing.",
-            expected_output="A structured list of core skill gaps and keywords missing from the applicant's profile.",
-            agent=gap_analyst
-        )
-        crew_2 = Crew(agents=[gap_analyst], tasks=[task_2], process=Process.sequential)
-        phase_2_output = str(crew_2.kickoff())
+        t2 = Task(description=f"Compare this resume:\n---\n{safe_resume}\n---\nAgainst these market openings:\n{phase_1_output}\nIdentify missing critical skills.", expected_output="List of core skill gaps and missing keywords.", agent=gap_analyst)
+        phase_2_output = str(Crew(agents=[gap_analyst], tasks=[t2], process=Process.sequential).kickoff())
 
         st.info("⚡ Phase 3/3: Assembling Actionable Education Roadmaps...")
-        task_3 = Task(
-            description=f"Based on these identified skill gaps:\n{phase_2_output}\n Provide high-value certification names and specific study materials to fill them.",
-            expected_output="An actionable learning path detailing training materials and certifications.",
-            agent=education_advisor
-        )
-        crew_3 = Crew(agents=[education_advisor], tasks=[task_3], process=Process.sequential)
-        phase_3_output = str(crew_3.kickoff())
+        t3 = Task(description=f"Based on these gaps:\n{phase_2_output}\nProvide certification names and study materials.", expected_output="Actionable learning path training materials.", agent=education_advisor)
+        phase_3_output = str(Crew(agents=[education_advisor], tasks=[t3], process=Process.sequential).kickoff())
 
-        final_stitched_report = f"""
-### 📊 1. Position Market Overview
-{phase_1_output}
-
-### 🔍 2. Resume Gap Analysis & ATS Evaluation
-{phase_2_output}
-
-### 🎓 3. Tailored Learning Path & Certifications
-{phase_3_output}
-"""
-        return final_stitched_report
-
+        return f"### 📊 1. Position Market Overview\n{phase_1_output}\n\n### 🔍 2. Resume Gap Analysis & ATS Evaluation\n{phase_2_output}\n\n### 🎓 3. Tailored Learning Path & Certifications\n{phase_3_output}"
     else:
-        task_r = Task(
-            description=f"Search Google via your tool for active openings in {region}. Rely entirely on the returned text snippets to find the 5 most common position names and top 5 required skills.",
-            expected_output="Live market data report with counts and job titles.",
-            agent=researcher
-        )
-        task_s = Task(
-            description=f"Review resume:\n---\n{safe_resume}\n---\nCompare it against the research data to format a full gap report and study path.",
-            expected_output="Full strategy report containing position market overview, missing qualifications, and learning milestones.",
-            agent=gap_analyst
-        )
-        crew = Crew(agents=[researcher, gap_analyst], tasks=[task_r, task_s], process=Process.sequential)
-        return str(crew.kickoff())
+        task_r = Task(description=f"Search Google via tool for active openings in {region}. Find the 5 most common position names and top 5 required skills.", expected_output="Live market data report with counts and job titles.", agent=researcher)
+        task_s = Task(description=f"Review resume:\n---\n{safe_resume}\n---\nCompare it against research data to format a full gap report and study path.", expected_output="Full strategy report.", agent=gap_analyst)
+        return str(Crew(agents=[researcher, gap_analyst], tasks=[task_r, task_s], process=Process.sequential).kickoff())
 
-# 4. EXECUTION FLOW
+# 4. FLUJO DE EJECUCIÓN ASOCIADO AL BOTÓN
 if st.button("🚀 Analyze Market & Enhance Resume"):
     if not resume_content or not region:
         st.error("Please provide both your resume and a target region.")
