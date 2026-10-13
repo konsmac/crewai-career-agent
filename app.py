@@ -1,5 +1,5 @@
 import streamlit as st
-import os, docx2txt, asyncio, requests, json
+import os, docx2txt, asyncio
 
 try:
     asyncio.get_running_loop()
@@ -10,12 +10,17 @@ except RuntimeError:
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
+from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_core.tools import tool
 
-# 1. SETUP ENVIRONMENTS & API KEYS
+# 1. SETUP ENVIRONMENTS & LLM ACCELERATION HOOKS
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
+
+# Safeguard Serper API Key into the environment dictionary where LangChain wrapper expects it
+if SERPER_API_KEY:
+    os.environ["SERPER_API_KEY"] = SERPER_API_KEY
 
 gemini_llm = ChatGoogleGenerativeAI(model="gemini-3.8-flash", google_api_key=GOOGLE_API_KEY, temperature=0.3) if GOOGLE_API_KEY else None
 groq_llm = ChatGroq(model="qwen/qwen3.8-27b", groq_api_key=GROQ_API_KEY, temperature=0.4, max_tokens=800) if GROQ_API_KEY else None
@@ -25,37 +30,25 @@ if GOOGLE_API_KEY:
 elif GROQ_API_KEY:
     st.sidebar.warning("⚡ Backup Engine: Groq Qwen Active")
 if not SERPER_API_KEY:
-    st.sidebar.error("⚠️ SERPER_API_KEY missing!")
+    st.sidebar.error("⚠️ SERPER_API_KEY environment variable missing!")
 
+# FIXED: Utilizing official wrapper class to guarantee correct endpoint routing
 @tool("Google Live Job Search Tool")
 def search_tool(query: str) -> str:
     """Searches Google for real-time live job postings, active hiring boards, and vacancy text snippets."""
-    if not SERPER_API_KEY:
-        return "Error: SERPER_API_KEY is missing."
-    user_region = st.session_state.get('target_region', 'Montreal')
+    if not os.environ.get("SERPER_API_KEY", ""):
+        return "Error: SERPER_API_KEY environment variable is missing."
     
-    # VERIFIED FIXED: Absolutely points to the functional endpoint route path
-    url = "https://serper.dev"
+    user_region = st.session_state.get('target_region', 'Montreal')
     clean_query = query.replace('"', '').replace("'", "")
     
-    payload = json.dumps({
-        "q": f"{clean_query} jobs openings vacancies hiring in {user_region} (site:://linkedin.com OR site:indeed.com)",
-        "num": 10
-    })
-    headers = {'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json'}
     try:
-        response = requests.post(url, headers=headers, data=payload, timeout=12)
-        if response.status_code != 200:
-            return f"Error: Serper API server returned status code {response.status_code}."
-        results = response.json()
-        output_data = []
-        if "organic" in results and results["organic"]:
-            for item in results["organic"]:
-                output_data.append(f"Title: {item.get('title', 'N/A')}\nSource: {item.get('link', 'N/A')}\nSnippet: {item.get('snippet', 'N/A')}\n---")
-            return "\n".join(output_data)
-        return f"No live search results found for '{clean_query}' in {user_region}."
+        # Instantiating the official wrapper automatically handles endpoint routing
+        search = GoogleSerperAPIWrapper()
+        optimized_query = f"{clean_query} jobs vacancies hiring openings in {user_region} site:://linkedin.com OR site:indeed.com"
+        return search.run(optimized_query)
     except Exception as e:
-        return f"Network connectivity error trying to contact Google Search API: {str(e)}"
+        return f"Serper API execution fault encountered: {str(e)}"
 
 # 2. STREAMLIT WEB INTERFACE LAYOUT
 st.set_page_config(page_title="AI Agent Career Strategist", layout="wide")
@@ -127,7 +120,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     t_r = Task(description=f"Search Google via tool for active openings in {region}. Find the 5 most common position names and top 5 required skills.", expected_output="Live market data report with counts and job titles.", agent=researcher)
                     t_s = Task(description=f"Review resume:\n---\n{safe_resume}\n---\nCompare it against research data to format a full gap report and study path.", expected_output="Full strategy report.", agent=gap_analyst)
                     
-                    crew = Crew(agents=[researcher], tasks=[t_r, t_s], process=Process.sequential)
+                    crew = Crew(agents=[researcher, gap_analyst], tasks=[t_r, t_s], process=Process.sequential)
                     monolithic_result = str(crew.kickoff())
                     
                     status_slot.success("✨ Analysis Complete!")
