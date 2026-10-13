@@ -56,7 +56,7 @@ def search_tool(query: str) -> str:
     url = "https://serper.dev"
     
     payload = json.dumps({
-        "q": f'"{query}" jobs hiring vacancies openings in {user_region} site:://linkedin.com OR site:indeed.com',
+        "q": f'"{query}" jobs hiring vacancies openings in {user_region} site:linkedin.com OR site:indeed.com',
         "num": 10
     })
     headers = {
