@@ -19,7 +19,7 @@ from langchain_core.tools import tool
 # 1. SETUP LLM & SEARCH CONFIGURATION WITH DYNAMIC FALLBACKS
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")  # Get your free key at https://serper.dev
+SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
 
 # Primary engine
 gemini_llm = ChatGoogleGenerativeAI(
@@ -43,7 +43,7 @@ elif GROQ_API_KEY:
     st.sidebar.warning("⚡ Backup Engine: Groq Qwen 3.8 Active")
 
 if not SERPER_API_KEY:
-    st.sidebar.error("⚠️ SERPER_API_KEY missing! Live Google data will fail. Add it to Render environment variables.")
+    st.sidebar.error("⚠️ SERPER_API_KEY missing! Live Google data will fail.")
 
 # Google Search Tool via Serper API to prevent cloud blocking
 @tool("Google Live Job Search Tool")
@@ -110,7 +110,6 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
     words = resume_content.split()
     safe_resume = " ".join(words[:max_words]) if len(words) > max_words else resume_content
 
-    # Defining the Core Specialized Agents
     researcher = Agent(
         role='Market Research Analyst',
         goal=f'Analyze real-time search results of open job postings in {region} from the {timeframe}. Log exact vacancy titles and cross-reference common instances.',
@@ -139,9 +138,7 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
         llm=selected_llm
     )
 
-    # 3-Phase Chain Execution Block
     if use_split_pipeline:
-        # PHASE 1: POSITION METRICS DISCOVERY
         st.info("⚡ Phase 1/3: Querying Google API & Analyzing Live Vacancy Titles...")
         task_1 = Task(
             description=f"Analyze the live search snippets returned by the Google Search tool for {region}. Review the titles, count total distinct open entries surfaced in the text pool, and compile the 5 most frequent exact position names.",
@@ -151,7 +148,6 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
         crew_1 = Crew(agents=[researcher], tasks=[task_1], process=Process.sequential)
         phase_1_output = str(crew_1.kickoff())
 
-        # PHASE 2: ATS RESUME GAP ANALYSIS
         st.info("⚡ Phase 2/3: Mapping Structural Keyword & Skill Gaps...")
         task_2 = Task(
             description=f"Compare this resume:\n---\n{safe_resume}\n---\nAgainst these genuine live market openings discovered in Phase 1:\n{phase_1_output}\nIdentify exactly which critical skills are missing.",
@@ -161,10 +157,9 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
         crew_2 = Crew(agents=[gap_analyst], tasks=[task_2], process=Process.sequential)
         phase_2_output = str(crew_2.kickoff())
 
-        # PHASE 3: UPSKILLING ROADMAP GENERATION
         st.info("⚡ Phase 3/3: Assembling Actionable Education Roadmaps...")
         task_3 = Task(
-            description=f"Based on these identified skill gaps:\n{phase_2_output}\nProvide high-value certification names and specific study materials to fill them.",
+            description=f"Based on these identified skill gaps:\n{phase_2_output}\n Provide high-value certification names and specific study materials to fill them.",
             expected_output="An actionable learning path detailing training materials and certifications.",
             agent=education_advisor
         )
@@ -184,7 +179,6 @@ def run_strategic_pipeline(selected_llm, use_split_pipeline=False):
         return final_stitched_report
 
     else:
-        # Standard workflow for Gemini
         task_r = Task(
             description=f"Search Google via your tool for active openings in {region}. Rely entirely on the returned text snippets to find the 5 most common position names and top 5 required skills.",
             expected_output="Live market data report with counts and job titles.",
@@ -214,14 +208,20 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or not gemini_llm:
-                    st.warning("⚠️ Primary limit reached. Running multi-phase fallback sequence to preserve output depth...")
+                    st.warning("⚠️ Primary limit reached. Running fallback sequence...")
                     if groq_llm:
                         try:
                             result = run_strategic_pipeline(groq_llm, use_split_pipeline=True)
                         except Exception as groq_error:
                             st.error(f"Execution failed: {groq_error}")
-                            st.stop()
                     else:
                         st.error("❌ Missing backup API configurations.")
-                        st.stop()
                 else:
+                    st.error(f"Unexpected error: {error_msg}")
+
+            if result:
+                st.success("✨ Analysis Complete!")
+                st.markdown("### 📊 Market & Resume Strategy Report")
+                st.markdown(result)
+            else:
+                st.error("Pipeline finished but no output data was generated.")
