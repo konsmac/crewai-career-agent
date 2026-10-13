@@ -35,7 +35,7 @@ if not SERPER_API_KEY:
 # FIXED: Utilizing official wrapper class to guarantee correct endpoint routing
 @tool("Google Live Job Search Tool")
 def search_tool(query: str) -> str:
-    """Searches Google for real-time live job postings, active hiring boards, and vacancy text snippets."""
+    """Searches Google for real-time live job postings those are direct match or very close for the resume title, active hiring boards, and vacancy text snippets."""
     if not os.environ.get("SERPER_API_KEY", ""):
         return "Error: SERPER_API_KEY environment variable is missing."
     
@@ -45,7 +45,7 @@ def search_tool(query: str) -> str:
     try:
         # Instantiating the official wrapper automatically handles endpoint routing
         search = GoogleSerperAPIWrapper()
-        optimized_query = f"{clean_query} jobs vacancies hiring openings in {user_region} site:://linkedin.com OR site:indeed.com"
+        optimized_query = f"{clean_query} jobs vacancies related to the resume title hiring openings in {user_region} site:://linkedin.com OR site:indeed.com"
         return search.run(optimized_query)
     except Exception as e:
         return f"Serper API execution fault encountered: {str(e)}"
