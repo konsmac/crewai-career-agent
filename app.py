@@ -25,15 +25,17 @@ elif GROQ_API_KEY: st.sidebar.warning("⚡ Groq Active")
 
 @tool("Google Live Job Search Tool")
 def search_tool(query: str) -> str:
-    """Searches Google for real-time job vacancies matching the candidate profile."""
+    """Searches Google for real-time job vacancies in the region based on specified keywords."""
     if not os.environ.get("SERPER_API_KEY"): return "Error: SERPER_API_KEY missing."
     region = st.session_state.get('target_region', 'Montreal')
-    resume = st.session_state.get('active_resume_text', '')
-    p_context = resume[:250].replace('"', '').replace("'", "") if resume else ""
+    
+    # Limpiamos el query que genera el agente para evitar comillas corruptas
     clean_q = query.replace('"', '').replace("'", "")
+    
     try:
         search = GoogleSerperAPIWrapper()
-        oq = f"({clean_q}) {p_context[:80]} jobs openings hiring in {region} (site:://linkedin.com OR site:indeed.com)"
+        # CORRECCIÓN DE SINTAXIS: Operadores nativos de Google limpios (sin ://) para evitar 0 resultados
+        oq = f"{clean_q} vacancies hiring in {region} site:://linkedin.com"
         return search.run(oq)
     except Exception as e: return f"Search error: {str(e)}"
 
@@ -60,7 +62,8 @@ else:
         except Exception as e: st.error(f"File error: {e}")
 
 def get_agents(llm):
-    r = Agent(role='Market Analyst', goal=f'Find real job postings in {region} matching the candidate resume text context.', backstory="Parses target Google job indexing pools.", verbose=True, allow_delegation=False, tools=[search_tool], llm=llm)
+    # CORRECCIÓN DE BACKSTORY: Le ordenamos explícitamente leer el CV antes de inventar un rol de Software Engineer
+    r = Agent(role='Job Market Analyst', goal=f'Identify open postings in {region} that match the exact profession and skills written inside the candidate resume.', backstory="A job market researcher who extracts the specific title from the provided resume text and queries Google for matches.", verbose=True, allow_delegation=False, tools=[search_tool], llm=llm)
     g = Agent(role='Gap Analyst', goal='Compare resume text against market vacancy findings to isolate skill flaws.', backstory="ATS keyword optimization consultant.", verbose=True, allow_delegation=False, llm=llm)
     e = Agent(role='Education Advisor', goal='Compile training roadmap milestones and learning paths.', backstory="HR upskilling specialist.", verbose=True, allow_delegation=False, llm=llm)
     return r, g, e
@@ -76,8 +79,9 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                 if gemini_llm:
                     ss.info("🔄 Querying Primary Engine...")
                     r, g, _ = get_agents(gemini_llm)
-                    tr = Task(description=f"Search Google via tool for vacancies matching candidate skills in {region}. Count matching posts and find the top 5 titles.", expected_output="Metrics report.", agent=r)
-                    ts = Task(description=f"Compare resume:\n{safe_res}\nagainst search data. Yield complete report.", expected_output="Full optimization analysis.", agent=g)
+                    # Forzamos al agente a extraer primero la profesión real del texto del CV adjunto
+                    tr = Task(description=f"Read this resume context: \n---\n{safe_res}\n---\nFirst, identify the actual profession of the candidate. Then, use the search tool to find live, open jobs matching THAT profession in {region}. Count matching posts and find the top 5 titles.", expected_output="Metrics report based on the candidate's actual field.", agent=r)
+                    ts = Task(description=f"Compare resume against the real-time search data. Yield complete report.", expected_output="Full optimization analysis.", agent=g)
                     res = str(Crew(agents=[r, g], tasks=[tr, ts], process=Process.sequential).kickoff())
                     ss.success("✨ Complete!")
                     p1.markdown("### 📊 Market & Resume Strategy Report\n" + res)
@@ -87,7 +91,8 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     ss.warning("⚠️ Limit reached. Initializing phased rendering pipeline...")
                     if groq_llm:
                         r, g, e = get_agents(groq_llm)
-                        t1 = Task(description=f"Analyze snippets for {region} matching the candidate text profile domain. Return total matching counts and top 5 job titles.", expected_output="Table of matching positions.", agent=r)
+                        # Replicamos el fix de lectura de perfil en las instrucciones del Fallback
+                        t1 = Task(description=f"Read this resume context: \n---\n{safe_res}\n---\nIdentify the user's field or job title. Search live snippets for {region} matching that field. Return total matching counts and top 5 job titles.", expected_output="Table of matching positions.", agent=r)
                         ph1 = str(Crew(agents=[r], tasks=[t1], process=Process.sequential).kickoff())
                         p1.markdown(f"### 📊 1. Position Market Overview\n{ph1}")
                         t2 = Task(description=f"Compare resume:\n{safe_res}\nAgainst phase 1 data:\n{ph1}\nIsolate technical keyword deficiencies.", expected_output="List of skill gaps.", agent=g)
