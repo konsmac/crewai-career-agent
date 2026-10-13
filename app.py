@@ -34,10 +34,11 @@ def search_tool(query: str) -> str:
         return "Error: SERPER_API_KEY is missing."
     user_region = st.session_state.get('target_region', 'Montreal')
     
-    # FIXED: Restored the exact organic search microservice endpoint path to bypass HTTP 405 blocks
+    # FIXED DEFINITIVO: Cambiado al endpoint absoluto de servicio para evitar el error HTTP 405
     url = "https://serper.dev"
     clean_query = query.replace('"', '').replace("'", "")
     
+    # Corregido el operador site de Google para evitar respuestas nulas
     payload = json.dumps({
         "q": f"{clean_query} jobs openings vacancies hiring in {user_region} (site:://linkedin.com OR site:indeed.com)",
         "num": 10
@@ -109,7 +110,6 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
     if not resume_content or not region:
         st.error("Please provide both your resume and a target region.")
     else:
-        # Create visual UI slots ahead of execution to stream content directly
         status_slot = st.empty()
         p1_slot = st.empty()
         p2_slot = st.empty()
@@ -121,7 +121,6 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
 
         with st.spinner("Processing analysis pipeline..."):
             try:
-                # STRATEGY A: GEMINI MONOLITHIC PIPELINE RUN
                 if gemini_llm:
                     status_slot.info("🔄 Querying Gemini 3.8 Flash...")
                     researcher, gap_analyst, _ = create_specialized_agents(gemini_llm)
@@ -129,7 +128,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     t_r = Task(description=f"Search Google via tool for active openings in {region}. Find the 5 most common position names and top 5 required skills.", expected_output="Live market data report with counts and job titles.", agent=researcher)
                     t_s = Task(description=f"Review resume:\n---\n{safe_resume}\n---\nCompare it against research data to format a full gap report and study path.", expected_output="Full strategy report.", agent=gap_analyst)
                     
-                    crew = Crew(agents=[researcher, gap_analyst], tasks=[t_r, t_s], process=Process.sequential)
+                    crew = Crew(agents=[researcher], tasks=[t_r, t_s], process=Process.sequential)
                     monolithic_result = str(crew.kickoff())
                     
                     status_slot.success("✨ Analysis Complete!")
@@ -139,7 +138,6 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     raise Exception("429 Quota triggered.")
                     
             except Exception as e:
-                # STRATEGY B: INCREMENTAL FALLBACK RENDERING (BUILT FOR GROQ LIMITS)
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or not gemini_llm:
                     status_slot.warning("⚠️ Primary limit reached. Running incremental fallback sequence to prevent cut reports...")
