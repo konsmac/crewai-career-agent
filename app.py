@@ -26,9 +26,9 @@ gemini_llm = ChatGoogleGenerativeAI(
     temperature=0.3
 ) if GOOGLE_API_KEY else None
 
-# FIXED: Swapped out retired Llama string for active Groq open tier engine
+# CORRECCIÓN: Usamos Llama 3.3 70B que ofrece límites de TPM (Tokens por Minuto) mucho más amplios en la capa gratuita
 groq_llm = ChatGroq(
-    model="openai/gpt-oss-120b",
+    model="llama-3.3-70b-versatile",
     groq_api_key=GROQ_API_KEY,
     temperature=0.3
 ) if GROQ_API_KEY else None
@@ -37,7 +37,7 @@ groq_llm = ChatGroq(
 if GOOGLE_API_KEY:
     st.sidebar.success("🤖 Primary Engine: Gemini 3.8 Flash Active")
 elif GROQ_API_KEY:
-    st.sidebar.warning("⚡ Backup Engine: Groq GPT-OSS 120B Active (Gemini Skipped)")
+    st.sidebar.warning("⚡ Backup Engine: Groq Llama 3.3 Active (Gemini Skipped)")
 else:
     st.error("⚠️ Missing API keys! Please provide GOOGLE_API_KEY or GROQ_API_KEY in Render configuration.")
 
@@ -80,6 +80,12 @@ else:
 
 # 3. CREWAI AGENT ORCHESTRATION FUNCTION WITH HARD FALLBACK EXCEPTION CATCHING
 def run_job_crew(selected_llm):
+    # PROTECCIÓN TPM: Si el currículum es exageradamente largo, lo truncamos de forma segura para no saturar el TPM de Groq
+    # 1 palabra aproximada = 1.3 tokens. 3500 palabras es un límite excelente para mantener contexto sin romper la API.
+    max_words = 3500
+    words = resume_content.split()
+    safe_resume = " ".join(words[:max_words]) if len(words) > max_words else resume_content
+
     # Agent 1: The Market Researcher
     researcher = Agent(
         role='Market Research Analyst',
@@ -115,7 +121,7 @@ def run_job_crew(selected_llm):
     task_strategy = Task(
         description=f"""Review this user resume:
         ---
-        {resume_content}
+        {safe_resume}
         ---
         Using the market research report compiled by the researcher, identify missing critical skills. 
         Provide a structured list of missing skills, specific certification recommendations, and free or premium study materials.""",
@@ -149,8 +155,9 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     
             except Exception as e:
                 error_msg = str(e)
+                # Capturamos errores de Cuota (429) o fallos inesperados de Gemini
                 if "429" in error_msg or "quota" in error_msg.lower() or not gemini_llm:
-                    st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq fallback engine...")
+                    st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq Llama 3.3 fallback engine...")
                     
                     if groq_llm:
                         try:
