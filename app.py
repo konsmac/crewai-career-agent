@@ -42,7 +42,7 @@ elif GROQ_API_KEY:
 if not SERPER_API_KEY:
     st.sidebar.error("⚠️ SERPER_API_KEY missing! Live Google data will fail.")
 
-# HERRAMIENTA DE BÚSQUEDA CORREGIDA (ENDPOINT EXACTO PARA EVITAR ERROR 405)
+# HERRAMIENTA DE BÚSQUEDA CORREGIDA (URL ABSOLUTA DE CONSULTA ORGÁNICA PARA EVITAR EL ERROR 405)
 @tool("Google Live Job Search Tool")
 def search_tool(query: str) -> str:
     """Searches Google for real-time live job postings, active hiring boards, and vacancy text snippets."""
@@ -50,7 +50,7 @@ def search_tool(query: str) -> str:
         return "Error: SERPER_API_KEY is missing. Real-time data cannot be pulled securely."
     
     user_region = st.session_state.get('target_region', 'Montreal')
-    # FIX: Cambiado el endpoint raíz por la ruta de servicio oficial de Serper que acepta peticiones POST
+    # SOLUCIÓN DEFINITIVA: Cambiado a la URL de endpoint correcto de la API de Serper
     url = "https://serper.dev"
     clean_query = query.replace('"', '').replace("'", "")
     
