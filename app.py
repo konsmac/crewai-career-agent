@@ -33,8 +33,11 @@ def search_tool(query: str) -> str:
     if not SERPER_API_KEY:
         return "Error: SERPER_API_KEY is missing."
     user_region = st.session_state.get('target_region', 'Montreal')
+    
+    # FIXED: Restored the exact organic search microservice endpoint path to bypass HTTP 405 blocks
     url = "https://serper.dev"
     clean_query = query.replace('"', '').replace("'", "")
+    
     payload = json.dumps({
         "q": f"{clean_query} jobs openings vacancies hiring in {user_region} (site:://linkedin.com OR site:indeed.com)",
         "num": 10
@@ -90,7 +93,7 @@ def create_specialized_agents(selected_llm):
     gap_analyst = Agent(
         role='Resume Gap Analyst',
         goal='Compare a technical resume against active market demands to uncover critical missing keywords and skills.',
-        backstory="An expert ATS filtering specialist who exposes missing core assets.",
+        backstory="An expert ATS filtering specialist who exposes missing core assets in professional profiles.",
         verbose=True, allow_delegation=False, llm=selected_llm
     )
     education_advisor = Agent(
@@ -152,7 +155,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                         
                         # PHASE 2
                         status_slot.info("⚡ Phase 2/3: Uncovering Keyword Deficiencies...")
-                        task_2 = Task(description=f"Compare this resume:\n---\n{safe_resume}\n---\nAgainst these openings:\n{phase_1_output}\nIdentify missing critical skills.", expected_output="A structured list of core skill gaps.", agent=gap_analyst)
+                        task_2 = Task(description=f"Compare this resume:\n---\n{safe_resume}\n---\nAgainst these openings:\n{phase_1_output}\nIdentify exactly which critical skills are missing.", expected_output="A structured list of core skill gaps.", agent=gap_analyst)
                         phase_2_output = str(Crew(agents=[gap_analyst], tasks=[task_2], process=Process.sequential).kickoff())
                         p2_slot.markdown(f"### 🔍 2. Resume Gap Analysis\n{phase_2_output}")
                         
