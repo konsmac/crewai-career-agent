@@ -40,12 +40,23 @@ if GOOGLE_API_KEY:
 elif GROQ_API_KEY:
     st.sidebar.warning("⚡ Backup Engine: Groq Qwen 3.8 Active")
 
-# WRAP THE DUCKDUCKGO TOOL
+# FIXED: Re-engineered search tool that dynamically restructures queries to pull real vacancy pages
 @tool("Web Search Tool")
 def search_tool(query: str) -> str:
     """Useful to search the internet for live job postings, market trends, and role vacancies."""
     search = DuckDuckGoSearchRun()
-    return search.run(query)
+    
+    # Extract the user's targeted region from the Streamlit state securely
+    user_region = st.session_state.get('target_region', 'Remote')
+    
+    # Force search operators to bypass generic blog posts and hit real job vacancy indicators
+    optimized_query = f"{query} {user_region} site:://linkedin.com OR site:indeed.com jobs"
+    
+    try:
+        return search.run(optimized_query)
+    except Exception:
+        # Secondary backup clean query if operators trigger strict DuckDuckGo rate flags
+        return search.run(f"active job vacancies postings hiring in {user_region} {query}")
 
 # 2. STREAMLIT WEB INTERFACE
 st.set_page_config(page_title="AI Agent Career Strategist", layout="wide")
@@ -55,7 +66,7 @@ st.subheader("Optimize your resume using real-time market data")
 # User Inputs
 col1, col2 = st.columns(2)
 with col1:
-    region = st.text_input("📍 Target Geographic Region", placeholder="e.g., New York, Remote US, Toronto")
+    region = st.text_input("📍 Target Geographic Region", placeholder="e.g., New York, Remote US, Toronto", key="target_region")
 with col2:
     timeframe = st.selectbox("⏳ Job Posting Timeframe", ["Past 24 hours", "Past week", "Past month"])
 
@@ -79,11 +90,11 @@ def run_strategic_pipeline(selected_llm, sequential_fallback=False):
     words = resume_content.split()
     safe_resume = " ".join(words[:max_words]) if len(words) > max_words else resume_content
 
-    # UPDATED: Researcher Agent now tracks position names and counts explicitly
+    # Researcher Agent
     researcher = Agent(
         role='Market Research Analyst',
-        goal=f'Identify and count live vacancies in {region} during the {timeframe}, keeping strict track of exact job titles.',
-        backstory="An expert labor market trends miner who tracks volume metrics and exact vacancy names.",
+        goal=f'Locate raw search results of open job postings in {region} from the {timeframe}. Count the active instances and parse the exact titles.',
+        backstory="A literal scraper analyst who extracts real-time metadata directly from raw search snippet blocks.",
         verbose=True,
         allow_delegation=False,
         tools=[search_tool], 
@@ -100,25 +111,25 @@ def run_strategic_pipeline(selected_llm, sequential_fallback=False):
         llm=selected_llm
     )
 
-    # UPDATED: Task 1 now explicitly mandates counting and listing the 5 most common position names
     task_research = Task(
-        description=f"""Search for open vacancies relevant to the candidate's professional field in {region}. 
-        You must look across job boards using your tool and determine:
-        1. An estimate or exact count of relevant open positions found.
-        2. The 5 most common position names/titles appearing in the results.
-        3. The top 5 technical skills required across those roles.""",
-        expected_output="A market intelligence summary detailing total positions found, the 5 most common job titles, and the top 5 technical skills.",
+        description=f"""Execute an online search for active open vacancies in {region}. 
+        Analyze the search results page carefully to derive:
+        1. The count of relevant active positions surfaced in the snippets.
+        2. The 5 most common specific position titles appearing in those active results.
+        3. The top 5 technical skills required across those roles.
+        
+        CRITICAL: Do not provide historical assumptions. If you find data, list it explicitly.""",
+        expected_output="A live market intelligence data report containing raw counts, explicit job titles found, and active skill requirements.",
         agent=researcher
     )
 
-    # UPDATED: Task 2 now blends the position metrics seamlessly into the final executive layout
     task_strategy = Task(
         description=f"""Review this resume:
         ---
         {safe_resume}
         ---
-        Using the market research report compiled by the researcher, format the final report. 
-        You must display the structural position metrics (Total found and the 5 common names) right at the top, followed by the skill gap analysis and tailored learning paths.""",
+        Using the live market research data report compiled by the researcher, format the final document. 
+        You must explicitly display the structural position metrics (Total found and the 5 common names) right at the top, followed by the skill gap analysis and tailored learning milestones.""",
         expected_output="An executive optimization report containing a position market overview, missing qualifications, and learning milestones.",
         agent=strategist
     )
