@@ -45,7 +45,7 @@ elif GROQ_API_KEY:
 if not SERPER_API_KEY:
     st.sidebar.error("⚠️ SERPER_API_KEY missing! Live Google data will fail. Add it to Render environment variables.")
 
-# FIXED: 100% Genuine, real-time Google Search Tool via Serper API to prevent cloud blocking
+# Google Search Tool via Serper API to prevent cloud blocking
 @tool("Google Live Job Search Tool")
 def search_tool(query: str) -> str:
     """Searches Google for real-time live job postings, active hiring boards, and vacancy text snippets."""
@@ -55,7 +55,6 @@ def search_tool(query: str) -> str:
     user_region = st.session_state.get('target_region', 'Montreal')
     url = "https://serper.dev"
     
-    # We build an authentic search query targeting actual job aggregates
     payload = json.dumps({
         "q": f'"{query}" jobs hiring vacancies openings in {user_region} site:://linkedin.com OR site:indeed.com',
         "num": 10
@@ -69,7 +68,6 @@ def search_tool(query: str) -> str:
         response = requests.post(url, headers=headers, data=payload, timeout=10)
         results = response.json()
         
-        # Parse out the actual organic titles and snippets from live Google Indexing
         output_data = []
         if "organic" in results:
             for item in results["organic"]:
@@ -222,3 +220,8 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                         except Exception as groq_error:
                             st.error(f"Execution failed: {groq_error}")
                             st.stop()
+                    else:
+                        st.error("❌ Missing backup API configurations.")
+                        st.stop()
+                else:
+                    st.error(f"Unexpected error: {e}")
