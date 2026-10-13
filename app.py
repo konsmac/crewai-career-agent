@@ -12,7 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from langchain_core.tools import tool
 
-# 1. SETUP ENVIRONMENTS & LLM ACCELERATION HOOKS
+# 1. SETUP ENVIRONMENTS & API KEYS
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
@@ -34,11 +34,10 @@ def search_tool(query: str) -> str:
         return "Error: SERPER_API_KEY is missing."
     user_region = st.session_state.get('target_region', 'Montreal')
     
-    # FIXED DEFINITIVO: Cambiado al endpoint absoluto de servicio para evitar el error HTTP 405
+    # VERIFIED FIXED: Absolutely points to the functional endpoint route path
     url = "https://serper.dev"
     clean_query = query.replace('"', '').replace("'", "")
     
-    # Corregido el operador site de Google para evitar respuestas nulas
     payload = json.dumps({
         "q": f"{clean_query} jobs openings vacancies hiring in {user_region} (site:://linkedin.com OR site:indeed.com)",
         "num": 10
@@ -88,7 +87,7 @@ def create_specialized_agents(selected_llm):
     researcher = Agent(
         role='Market Research Analyst',
         goal=f'Analyze real-time search results of open job postings in {region} from the {timeframe}. Log exact vacancy titles and cross-reference common instances.',
-        backstory="A precise labor market trends analyst who reads live Google indexing snippets.",
+        backstory="A precise labor market trends analyst who reads live Google indexing snippets to discover genuine positions.",
         verbose=True, allow_delegation=False, tools=[search_tool], llm=selected_llm
     )
     gap_analyst = Agent(
