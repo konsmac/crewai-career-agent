@@ -26,9 +26,9 @@ gemini_llm = ChatGoogleGenerativeAI(
     temperature=0.3
 ) if GOOGLE_API_KEY else None
 
-# CORRECCIÓN: Usamos Llama 3.3 70B que ofrece límites de TPM (Tokens por Minuto) mucho más amplios en la capa gratuita
+# FIXED: Swapped out the old string for Groq's active free-tier Llama 3.3 70B identifier
 groq_llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="llama-3.3-70b-specdec",
     groq_api_key=GROQ_API_KEY,
     temperature=0.3
 ) if GROQ_API_KEY else None
@@ -80,9 +80,8 @@ else:
 
 # 3. CREWAI AGENT ORCHESTRATION FUNCTION WITH HARD FALLBACK EXCEPTION CATCHING
 def run_job_crew(selected_llm):
-    # PROTECCIÓN TPM: Si el currículum es exageradamente largo, lo truncamos de forma segura para no saturar el TPM de Groq
-    # 1 palabra aproximada = 1.3 tokens. 3500 palabras es un límite excelente para mantener contexto sin romper la API.
-    max_words = 3500
+    # DYNAMIC TPM COMPRESSION: Safeguards your free tier limits by cleaning and trimming unnecessary padding
+    max_words = 2000
     words = resume_content.split()
     safe_resume = " ".join(words[:max_words]) if len(words) > max_words else resume_content
 
@@ -155,7 +154,6 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     
             except Exception as e:
                 error_msg = str(e)
-                # Capturamos errores de Cuota (429) o fallos inesperados de Gemini
                 if "429" in error_msg or "quota" in error_msg.lower() or not gemini_llm:
                     st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq Llama 3.3 fallback engine...")
                     
