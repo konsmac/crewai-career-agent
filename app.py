@@ -26,7 +26,7 @@ gemini_llm = ChatGoogleGenerativeAI(
     temperature=0.3
 ) if GOOGLE_API_KEY else None
 
-# Fallback engine (using max_tokens=800 per task step to optimize memory window)
+# Fallback engine 
 groq_llm = ChatGroq(
     model="qwen/qwen3.8-27b",
     groq_api_key=GROQ_API_KEY,
@@ -73,17 +73,17 @@ else:
         except Exception as e:
             st.error(f"Error parsing Word file: {e}")
 
-# 3. HIGH-QUALITY EXECUTION PIPELINE
+# 3. HIGH-QUALITY EXECUTION PIPELINE WITH POSITION INTELLIGENCE
 def run_strategic_pipeline(selected_llm, sequential_fallback=False):
     max_words = 2000
     words = resume_content.split()
     safe_resume = " ".join(words[:max_words]) if len(words) > max_words else resume_content
 
-    # Researcher Agent
+    # UPDATED: Researcher Agent now tracks position names and counts explicitly
     researcher = Agent(
         role='Market Research Analyst',
-        goal=f'Identify what hiring managers look for in {region} during the {timeframe}.',
-        backstory="Expert job board trends miner.",
+        goal=f'Identify and count live vacancies in {region} during the {timeframe}, keeping strict track of exact job titles.',
+        backstory="An expert labor market trends miner who tracks volume metrics and exact vacancy names.",
         verbose=True,
         allow_delegation=False,
         tools=[search_tool], 
@@ -93,38 +93,48 @@ def run_strategic_pipeline(selected_llm, sequential_fallback=False):
     # Strategist Agent
     strategist = Agent(
         role='Executive Career Strategist',
-        goal='Identify technical skill gaps and map comprehensive study paths.',
-        backstory="Seasoned HR executive specializing in high-value upskilling plans.",
+        goal='Compile position metrics, identify technical skill gaps, and map comprehensive study paths.',
+        backstory="Seasoned HR executive specializing in hiring market data interpretation and upskilling plans.",
         verbose=True,
         allow_delegation=False,
         llm=selected_llm
     )
 
+    # UPDATED: Task 1 now explicitly mandates counting and listing the 5 most common position names
     task_research = Task(
-        description=f"Find live job vacancies in {region} for this profile category. Extract the top 5 technical skills required.",
-        expected_output="A list of 5 key technical requirements discovered in active job ads.",
+        description=f"""Search for open vacancies relevant to the candidate's professional field in {region}. 
+        You must look across job boards using your tool and determine:
+        1. An estimate or exact count of relevant open positions found.
+        2. The 5 most common position names/titles appearing in the results.
+        3. The top 5 technical skills required across those roles.""",
+        expected_output="A market intelligence summary detailing total positions found, the 5 most common job titles, and the top 5 technical skills.",
         agent=researcher
     )
 
+    # UPDATED: Task 2 now blends the position metrics seamlessly into the final executive layout
     task_strategy = Task(
-        description=f"Compare this resume:\n---\n{safe_resume}\n---\nAgainst the discovered skills. Output a gap analysis report.",
-        expected_output="Comprehensive analysis outlining missing high-value qualifications and actionable learning milestones.",
+        description=f"""Review this resume:
+        ---
+        {safe_resume}
+        ---
+        Using the market research report compiled by the researcher, format the final report. 
+        You must display the structural position metrics (Total found and the 5 common names) right at the top, followed by the skill gap analysis and tailored learning paths.""",
+        expected_output="An executive optimization report containing a position market overview, missing qualifications, and learning milestones.",
         agent=strategist
     )
 
-    # If Gemini failed previously, execute the tasks independently to reset the Output token window clock
+    # Multi-phase sequence for Groq or Single loop for Gemini
     if sequential_fallback:
-        st.info("⚡ Executing Market Discovery phase...")
+        st.info("⚡ Phase 1: Analyzing Job Board Volumes & Position Names...")
         crew_1 = Crew(agents=[researcher], tasks=[task_research], process=Process.sequential)
         research_report = str(crew_1.kickoff())
         
-        st.info("⚡ Executing Strategic Resume Alignment phase...")
-        task_strategy.description = f"Review this resume:\n---\n{safe_resume}\n---\nBased on this market data:\n{research_report}\nFormulate a resume gap report."
+        st.info("⚡ Phase 2: Mapping Resume Alignment & Recommendations...")
+        task_strategy.description = f"Review this resume:\n---\n{safe_resume}\n---\nBased on this market data showing position volumes and titles:\n{research_report}\nFormulate the comprehensive strategy report."
         crew_2 = Crew(agents=[strategist], tasks=[task_strategy], process=Process.sequential)
         final_output = crew_2.kickoff()
         return final_output
     else:
-        # Standard combined monolithic run for Gemini
         crew = Crew(agents=[researcher, strategist], tasks=[task_research, task_strategy], process=Process.sequential)
         return crew.kickoff()
 
