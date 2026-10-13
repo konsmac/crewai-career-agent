@@ -19,16 +19,16 @@ from langchain_core.tools import tool
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-# Initialize models carefully
+# Initialize primary model (Gemini 3.8 Flash)
 gemini_llm = ChatGoogleGenerativeAI(
     model="gemini-3.8-flash", 
     google_api_key=GOOGLE_API_KEY,
     temperature=0.3
 ) if GOOGLE_API_KEY else None
 
-# FIXED: Swapped out the old string for Groq's active free-tier Llama 3.3 70B identifier
+# FIXED: Swapped out decommissioned model string for Groq's active free-tier engine (Qwen 3.8 27B)
 groq_llm = ChatGroq(
-    model="llama-3.3-70b-specdec",
+    model="qwen/qwen3.8-27b",
     groq_api_key=GROQ_API_KEY,
     temperature=0.3
 ) if GROQ_API_KEY else None
@@ -37,7 +37,7 @@ groq_llm = ChatGroq(
 if GOOGLE_API_KEY:
     st.sidebar.success("🤖 Primary Engine: Gemini 3.8 Flash Active")
 elif GROQ_API_KEY:
-    st.sidebar.warning("⚡ Backup Engine: Groq Llama 3.3 Active (Gemini Skipped)")
+    st.sidebar.warning("⚡ Backup Engine: Groq Qwen 3.8 27B Active (Gemini Skipped)")
 else:
     st.error("⚠️ Missing API keys! Please provide GOOGLE_API_KEY or GROQ_API_KEY in Render configuration.")
 
@@ -80,8 +80,8 @@ else:
 
 # 3. CREWAI AGENT ORCHESTRATION FUNCTION WITH HARD FALLBACK EXCEPTION CATCHING
 def run_job_crew(selected_llm):
-    # DYNAMIC TPM COMPRESSION: Safeguards your free tier limits by cleaning and trimming unnecessary padding
-    max_words = 2000
+    # DYNAMIC INTERFERENCE COMPRESSION: Keeps text tokens manageable for seamless free tier execution
+    max_words = 2500
     words = resume_content.split()
     safe_resume = " ".join(words[:max_words]) if len(words) > max_words else resume_content
 
@@ -155,7 +155,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or not gemini_llm:
-                    st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq Llama 3.3 fallback engine...")
+                    st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq Qwen fallback engine...")
                     
                     if groq_llm:
                         try:
