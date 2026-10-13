@@ -19,29 +19,28 @@ from langchain_core.tools import tool
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
-# Initialize primary model (Gemini 3.8 Flash)
+# Primary engine
 gemini_llm = ChatGoogleGenerativeAI(
     model="gemini-3.8-flash", 
     google_api_key=GOOGLE_API_KEY,
     temperature=0.3
 ) if GOOGLE_API_KEY else None
 
-# FIXED: Swapped out decommissioned model string for Groq's active free-tier engine (Qwen 3.8 27B)
+# Fallback engine (using max_tokens=800 per task step to optimize memory window)
 groq_llm = ChatGroq(
     model="qwen/qwen3.8-27b",
     groq_api_key=GROQ_API_KEY,
-    temperature=0.3
+    temperature=0.4,
+    max_tokens=800
 ) if GROQ_API_KEY else None
 
-# Sidebar status anchor
+# Sidebar status
 if GOOGLE_API_KEY:
     st.sidebar.success("🤖 Primary Engine: Gemini 3.8 Flash Active")
 elif GROQ_API_KEY:
-    st.sidebar.warning("⚡ Backup Engine: Groq Qwen 3.8 27B Active (Gemini Skipped)")
-else:
-    st.error("⚠️ Missing API keys! Please provide GOOGLE_API_KEY or GROQ_API_KEY in Render configuration.")
+    st.sidebar.warning("⚡ Backup Engine: Groq Qwen 3.8 Active")
 
-# WRAP THE DUCKDUCKGO TOOL INSIDE A COMPATIBLE FUNCTION
+# WRAP THE DUCKDUCKGO TOOL
 @tool("Web Search Tool")
 def search_tool(query: str) -> str:
     """Useful to search the internet for live job postings, market trends, and role vacancies."""
@@ -53,9 +52,6 @@ st.set_page_config(page_title="AI Agent Career Strategist", layout="wide")
 st.title("💼 AI Agent Career Strategist Network")
 st.subheader("Optimize your resume using real-time market data")
 
-if not GOOGLE_API_KEY and not GROQ_API_KEY:
-    st.warning("⚠️ Both GOOGLE_API_KEY and GROQ_API_KEY environment variables are missing. Please add at least one to your settings.")
-
 # User Inputs
 col1, col2 = st.columns(2)
 with col1:
@@ -63,7 +59,6 @@ with col1:
 with col2:
     timeframe = st.selectbox("⏳ Job Posting Timeframe", ["Past 24 hours", "Past week", "Past month"])
 
-# Resume Input Options
 resume_method = st.radio("How would you like to provide your resume?", ["Paste Text", "Upload Word Document (.docx)"])
 resume_content = ""
 
@@ -78,103 +73,90 @@ else:
         except Exception as e:
             st.error(f"Error parsing Word file: {e}")
 
-# 3. CREWAI AGENT ORCHESTRATION FUNCTION WITH HARD FALLBACK EXCEPTION CATCHING
-def run_job_crew(selected_llm):
-    # DYNAMIC INTERFERENCE COMPRESSION: Keeps text tokens manageable for seamless free tier execution
-    max_words = 2500
+# 3. HIGH-QUALITY EXECUTION PIPELINE
+def run_strategic_pipeline(selected_llm, sequential_fallback=False):
+    max_words = 2000
     words = resume_content.split()
     safe_resume = " ".join(words[:max_words]) if len(words) > max_words else resume_content
 
-    # Agent 1: The Market Researcher
+    # Researcher Agent
     researcher = Agent(
         role='Market Research Analyst',
-        goal=f'Search and analyze live job postings in {region} from the {timeframe} matching the candidate profile.',
-        backstory="An expert in finding trends on job boards. You identify what hiring managers are actively looking for right now.",
+        goal=f'Identify what hiring managers look for in {region} during the {timeframe}.',
+        backstory="Expert job board trends miner.",
         verbose=True,
         allow_delegation=False,
         tools=[search_tool], 
         llm=selected_llm
     )
 
-    # Agent 2: The Resume & Career Strategist
+    # Strategist Agent
     strategist = Agent(
         role='Executive Career Strategist',
-        goal='Compare the user resume against live market demands and outline high-value skill gaps and study materials.',
-        backstory="A seasoned HR executive who knows exactly how to make a resume stand out. You provide actionable upskilling paths.",
+        goal='Identify technical skill gaps and map comprehensive study paths.',
+        backstory="Seasoned HR executive specializing in high-value upskilling plans.",
         verbose=True,
         allow_delegation=False,
         llm=selected_llm
     )
 
-    # Task 1: Research the market
     task_research = Task(
-        description=f"""Use the search tool to find live job vacancies or job market criteria relevant to the user profile concept.
-        Target Region: {region}
-        Timeframe constraint: {timeframe}
-        Identify the top 5 highly repeated keywords and technical expectations in recent postings.""",
-        expected_output="A structured report listing top trending skills and core requirements based on live roles.",
+        description=f"Find live job vacancies in {region} for this profile category. Extract the top 5 technical skills required.",
+        expected_output="A list of 5 key technical requirements discovered in active job ads.",
         agent=researcher
     )
 
-    # Task 2: Gap Analysis and Upskilling Recommendations
     task_strategy = Task(
-        description=f"""Review this user resume:
-        ---
-        {safe_resume}
-        ---
-        Using the market research report compiled by the researcher, identify missing critical skills. 
-        Provide a structured list of missing skills, specific certification recommendations, and free or premium study materials.""",
-        expected_output="A tailored optimization strategy with structural resume advice and learning resources.",
+        description=f"Compare this resume:\n---\n{safe_resume}\n---\nAgainst the discovered skills. Output a gap analysis report.",
+        expected_output="Comprehensive analysis outlining missing high-value qualifications and actionable learning milestones.",
         agent=strategist
     )
 
-    crew = Crew(
-        agents=[researcher, strategist],
-        tasks=[task_research, task_strategy],
-        process=Process.sequential
-    )
-    
-    return crew.kickoff()
+    # If Gemini failed previously, execute the tasks independently to reset the Output token window clock
+    if sequential_fallback:
+        st.info("⚡ Executing Market Discovery phase...")
+        crew_1 = Crew(agents=[researcher], tasks=[task_research], process=Process.sequential)
+        research_report = str(crew_1.kickoff())
+        
+        st.info("⚡ Executing Strategic Resume Alignment phase...")
+        task_strategy.description = f"Review this resume:\n---\n{safe_resume}\n---\nBased on this market data:\n{research_report}\nFormulate a resume gap report."
+        crew_2 = Crew(agents=[strategist], tasks=[task_strategy], process=Process.sequential)
+        final_output = crew_2.kickoff()
+        return final_output
+    else:
+        # Standard combined monolithic run for Gemini
+        crew = Crew(agents=[researcher, strategist], tasks=[task_research, task_strategy], process=Process.sequential)
+        return crew.kickoff()
 
 # 4. EXECUTION FLOW
 if st.button("🚀 Analyze Market & Enhance Resume"):
-    if not gemini_llm and not groq_llm:
-        st.error("No valid LLM models configured. Check your API Keys.")
-    elif not resume_content or not region:
+    if not resume_content or not region:
         st.error("Please provide both your resume and a target region.")
     else:
-        with st.spinner("Agents are actively researching live job boards..."):
-            # Attempt execution via primary engine (Gemini) first
+        with st.spinner("Processing analysis pipeline..."):
             try:
                 if gemini_llm:
                     st.info("🔄 Querying Gemini 3.8 Flash...")
-                    result = run_job_crew(gemini_llm)
+                    result = run_strategic_pipeline(gemini_llm, sequential_fallback=False)
                 else:
-                    raise Exception("Gemini key missing, falling back.")
-                    
+                    raise Exception("429 Quota triggered.")
             except Exception as e:
                 error_msg = str(e)
                 if "429" in error_msg or "quota" in error_msg.lower() or not gemini_llm:
-                    st.warning("⚠️ Gemini Free Quota Exceeded (429)! Instantly routing agents to Groq Qwen fallback engine...")
-                    
+                    st.warning("⚠️ Primary limit reached. Running multi-phase fallback sequence to preserve output depth...")
                     if groq_llm:
                         try:
-                            result = run_job_crew(groq_llm)
+                            result = run_strategic_pipeline(groq_llm, sequential_fallback=True)
                         except Exception as groq_error:
-                            st.error(f"Groq Engine execution error: {groq_error}")
+                            st.error(f"Execution failed: {groq_error}")
                             st.stop()
                     else:
-                        st.error("❌ Gemini failed and no GROQ_API_KEY was found in environment to recover execution.")
+                        st.error("Missing backup API configurations.")
                         st.stop()
                 else:
-                    st.error(f"An unexpected error occurred: {e}")
+                    st.error(f"Unexpected error: {e}")
                     st.stop()
 
-            # Output results to UI safely
             st.success("✨ Analysis Complete!")
             st.markdown("### 📊 Market & Resume Strategy Report")
-            
-            if hasattr(result, 'raw'):
-                st.markdown(result.raw)
-            else:
-                st.markdown(str(result))
+            st.markdown(result.raw if hasattr(result, 'raw') else str(result))
