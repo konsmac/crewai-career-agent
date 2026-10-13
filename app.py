@@ -204,6 +204,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
         st.error("Please provide both your resume and a target region.")
     else:
         with st.spinner("Processing analysis pipeline..."):
+            result = None
             try:
                 if gemini_llm:
                     st.info("🔄 Querying Gemini 3.8 Flash...")
@@ -224,4 +225,3 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                         st.error("❌ Missing backup API configurations.")
                         st.stop()
                 else:
-                    st.error(f"Unexpected error: {e}")
