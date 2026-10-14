@@ -1,5 +1,5 @@
 import streamlit as st
-import os, docx2txt, asyncio
+import os, asyncio
 from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
@@ -14,8 +14,7 @@ except RuntimeError:
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 SERPER_API_KEY = os.environ.get("SERPER_API_KEY", "")
-if SERPER_API_KEY:
-    os.environ["SERPER_API_KEY"] = SERPER_API_KEY
+if SERPER_API_KEY: os.environ["SERPER_API_KEY"] = SERPER_API_KEY
 
 gemini_llm = ChatGoogleGenerativeAI(model="gemini-3.8-flash", google_api_key=GOOGLE_API_KEY, temperature=0.3) if GOOGLE_API_KEY else None
 groq_llm = ChatGroq(model="qwen/qwen3.8-27b", groq_api_key=GROQ_API_KEY, temperature=0.4, max_tokens=800) if GROQ_API_KEY else None
@@ -28,13 +27,9 @@ def search_tool(query: str) -> str:
     """Searches Google for real-time job vacancies in the region based on specified keywords."""
     if not os.environ.get("SERPER_API_KEY"): return "Error: SERPER_API_KEY missing."
     region = st.session_state.get('target_region', 'Montreal')
-    
-    # Limpiamos el query que genera el agente para evitar comillas corruptas
     clean_q = query.replace('"', '').replace("'", "")
-    
     try:
         search = GoogleSerperAPIWrapper()
-        # CORRECCIÓN DE SINTAXIS: Operadores nativos de Google limpios (sin ://) para evitar 0 resultados
         oq = f"{clean_q} vacancies hiring in {region} site:://linkedin.com"
         return search.run(oq)
     except Exception as e: return f"Search error: {str(e)}"
@@ -47,22 +42,12 @@ col1, col2 = st.columns(2)
 with col1: region = st.text_input("📍 Target Region", placeholder="e.g., Montreal", key="target_region", value="Montreal")
 with col2: timeframe = st.selectbox("⏳ Timeframe", ["Past 24 hours", "Past week", "Past month"])
 
-rm = st.radio("Provide resume via:", ["Paste Text", "Upload .docx"])
-resume_content = ""
-if rm == "Paste Text":
-    resume_content = st.text_area("Ctrl+V your resume:", height=200)
-    if resume_content: st.session_state['active_resume_text'] = resume_content
-else:
-    f = st.file_uploader("Upload Word file", type=["docx"])
-    if f is not None:
-        try:
-            resume_content = docx2txt.process(f)
-            st.session_state['active_resume_text'] = resume_content
-            st.success("✅ Parsed successfully!")
-        except Exception as e: st.error(f"File error: {e}")
+# FIXED: Removed word file option entirely. Only raw text paste input remains.
+resume_content = st.text_area("📋 Ctrl+V your resume here (Raw Text):", height=250)
+if resume_content: 
+    st.session_state['active_resume_text'] = resume_content
 
 def get_agents(llm):
-    # CORRECCIÓN DE BACKSTORY: Le ordenamos explícitamente leer el CV antes de inventar un rol de Software Engineer
     r = Agent(role='Job Market Analyst', goal=f'Identify open postings in {region} that match the exact profession and skills written inside the candidate resume.', backstory="A job market researcher who extracts the specific title from the provided resume text and queries Google for matches.", verbose=True, allow_delegation=False, tools=[search_tool], llm=llm)
     g = Agent(role='Gap Analyst', goal='Compare resume text against market vacancy findings to isolate skill flaws.', backstory="ATS keyword optimization consultant.", verbose=True, allow_delegation=False, llm=llm)
     e = Agent(role='Education Advisor', goal='Compile training roadmap milestones and learning paths.', backstory="HR upskilling specialist.", verbose=True, allow_delegation=False, llm=llm)
@@ -79,7 +64,6 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                 if gemini_llm:
                     ss.info("🔄 Querying Primary Engine...")
                     r, g, _ = get_agents(gemini_llm)
-                    # Forzamos al agente a extraer primero la profesión real del texto del CV adjunto
                     tr = Task(description=f"Read this resume context: \n---\n{safe_res}\n---\nFirst, identify the actual profession of the candidate. Then, use the search tool to find live, open jobs matching THAT profession in {region}. Count matching posts and find the top 5 titles.", expected_output="Metrics report based on the candidate's actual field.", agent=r)
                     ts = Task(description=f"Compare resume against the real-time search data. Yield complete report.", expected_output="Full optimization analysis.", agent=g)
                     res = str(Crew(agents=[r, g], tasks=[tr, ts], process=Process.sequential).kickoff())
@@ -91,8 +75,7 @@ if st.button("🚀 Analyze Market & Enhance Resume"):
                     ss.warning("⚠️ Limit reached. Initializing phased rendering pipeline...")
                     if groq_llm:
                         r, g, e = get_agents(groq_llm)
-                        # Replicamos el fix de lectura de perfil en las instrucciones del Fallback
-                        t1 = Task(description=f"Read this resume context: \n---\n{safe_res}\n---\nIdentify the user's field or job title. Search live snippets for {region} matching that field. Return total matching counts and top 5 job titles.", expected_output="Table of matching positions.", agent=r)
+                        t1 = Task(description=f"Read this resume context: \n---\n{safe_resume if 'safe_resume' in locals() else safe_res}\n---\nIdentify the user's field or job title. Search live snippets for {region} matching that field. Return total matching counts and top 5 job titles.", expected_output="Table of matching positions.", agent=r)
                         ph1 = str(Crew(agents=[r], tasks=[t1], process=Process.sequential).kickoff())
                         p1.markdown(f"### 📊 1. Position Market Overview\n{ph1}")
                         t2 = Task(description=f"Compare resume:\n{safe_res}\nAgainst phase 1 data:\n{ph1}\nIsolate technical keyword deficiencies.", expected_output="List of skill gaps.", agent=g)
